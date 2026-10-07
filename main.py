@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
+
 # ==========================================
 # 02. LOGGING Y TRAZABILIDAD
 # ==========================================
@@ -52,10 +53,10 @@ MENSAJE_FALLBACK_HUMANO = (
 def get_or_create_chat(user_id: str):
     if user_id not in sessions:
         sessions[user_id] = client.chats.create(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             config=types.GenerateContentConfig(
                 system_instruction=INFORMACION_EMPRESA,
-                temperature=0.3  # Menos creatividad/alucinación
+                temperature=0.3
             )
         )
     return sessions[user_id]
