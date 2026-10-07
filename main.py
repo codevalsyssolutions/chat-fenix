@@ -2,11 +2,9 @@ import os
 import logging
 import traceback
 import requests
-from fastapi import FastAPI, Request, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Request, HTTPException
 from google import genai
 from google.genai import types
-
 
 # ==========================================
 # 02. LOGGING Y TRAZABILIDAD
@@ -26,7 +24,7 @@ PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "token_fenix")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Validar que existan las credenciales críticas antes de iniciar
+# Validar credenciales críticas
 if not all([META_ACCESS_TOKEN, PHONE_NUMBER_ID, GEMINI_API_KEY]):
     logger.warning("¡ALERTA! Faltan variables de entorno críticas por configurar.")
 
@@ -51,6 +49,7 @@ MENSAJE_FALLBACK_HUMANO = (
 )
 
 def get_or_create_chat(user_id: str):
+    """Obtiene o crea una sesión de chat persistente para el usuario."""
     if user_id not in sessions:
         sessions[user_id] = client.chats.create(
             model='gemini-2.5-flash',
@@ -62,11 +61,11 @@ def get_or_create_chat(user_id: str):
     return sessions[user_id]
 
 # ==========================================
-# 01 & 04. MANEJO DE ERRORES Y VALIDACIONES
+# 01 & 04. MANEJO DE ERRORES Y ENVÍO A META
 # ==========================================
 def send_whatsapp_message(to: str, text: str) -> bool:
-    """Envía mensaje por la API de Meta con reintento/fallo controlado."""
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+    """Envía mensaje por la API de Meta (v21.0)."""
+    url = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {META_ACCESS_TOKEN}",
         "Content-Type": "application/json"
@@ -119,7 +118,6 @@ async def receive_webhook(request: Request):
         logger.error("JSON malformado recibido en el webhook")
         return {"status": "invalid json"}
 
-    # Extraer estructuras de Meta de forma segura
     try:
         entries = body.get("entry", [])
         if not entries:
@@ -132,7 +130,7 @@ async def receive_webhook(request: Request):
         value = changes[0].get("value", {})
         messages = value.get("messages", [])
 
-        # Si es una notificación de estado (entregado/leído), ignorar de forma limpia
+        # Si es una notificación de estado (entregado/leído), ignorar
         if not messages:
             return {"status": "event_ignored"}
 
@@ -144,17 +142,18 @@ async def receive_webhook(request: Request):
         if msg_type == "text":
             user_text = message_data.get("text", {}).get("body", "").strip()
             
-            # Sanitización / Validación de entrada (03 & 04)
+            # Sanitización / Validación de entrada
             if not user_text or len(user_text) > 1000:
                 logger.warning(f"Mensaje rechazado por tamaño o vacío de {sender_id}")
                 return {"status": "message_rejected"}
 
             logger.info(f"Mensaje recibido de {sender_id}: '{user_text}'")
 
-            # Procesar respuesta con IA + Fallback de seguridad (01 & 06)
+            # Procesar respuesta con la sesión de Gemini
             try:
                 chat = get_or_create_chat(sender_id)
-                ai_response = chat.send_message(user_text).text
+                response = chat.send_message(user_text)
+                ai_response = response.text
             except Exception as ai_err:
                 logger.error(f"Fallo en motor Gemini: {str(ai_err)}")
                 ai_response = MENSAJE_FALLBACK_HUMANO
