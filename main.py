@@ -65,7 +65,7 @@ def get_or_create_chat(user_id: str):
 # ==========================================
 def send_whatsapp_message(to: str, text: str) -> bool:
     """Envía mensaje por la API de Meta (v21.0)."""
-    url = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v21.0/{1305463819311226}/messages"
     headers = {
         "Authorization": f"Bearer {META_ACCESS_TOKEN}",
         "Content-Type": "application/json"
